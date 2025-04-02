@@ -1,0 +1,42 @@
+version: '3.8'
+
+services:
+  ollama:
+    build:
+      context: .
+      dockerfile: build/ollama/Dockerfile
+    container_name: ollama-server
+    ports:
+      - "11434:11434"
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+    environment:
+      - NVIDIA_VISIBLE_DEVICES=all
+    volumes:
+      - ollama_models:/root/.ollama
+    entrypoint: ["/bin/bash", "-c", "ollama serve & sleep 5 && ollama list | grep -q 'gemma3:4b-it-q8_0' || ollama pull gemma3:4b-it-q8_0 && wait"]
+    restart: unless-stopped  
+
+  app:
+    build:
+      context: .
+      dockerfile: build/bot/Dockerfile
+    container_name: llm_bot
+    stdin_open: true
+    tty: true
+    volumes:
+      - .:/llm_bot
+    depends_on:
+      - ollama
+    command: ["python3", "/llm_bot/src/tg_bot_simplified.py"]
+    environment:
+      - OLLAMA_HOST=http://ollama-server:11434
+    restart: unless-stopped  
+
+volumes:
+  ollama_models:
